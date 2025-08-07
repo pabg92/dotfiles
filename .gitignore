@@ -1,0 +1,16 @@
+# Sensitive files
+*.key
+*.pem
+*.env
+*_secret*
+*_private*
+
+# Cache and temporary files
+*.cache
+*.log
+*.swp
+*.tmp
+
+# System files
+.DS_Store
+Thumbs.db
