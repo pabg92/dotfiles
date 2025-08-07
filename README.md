@@ -1,6 +1,6 @@
 # Dotfiles
 
-My personal configuration files for Fedora Asahi Linux on MacBook.
+My personal configuration files for Fedora Asahi Linux on my m2 MacBook Air.
 
 ## Contents
 
