@@ -22,13 +22,14 @@ cd dotfiles
 
 The installer backs up replaced files with a timestamp before copying anything. The rotation helper uses `monitor-sensor` when available and falls back to the XPS's IIO accelerometer directly.
 
-Hardware maintenance and fingerprint enrollment remain interactive:
+Hardware maintenance remains interactive:
 
 ```bash
-omarchy setup security fingerprint
 omarchy update firmware
 omarchy snapshot create
 ```
+
+The XPS 13 9310 2-in-1 fingerprint reader is Goodix `27c6:532d`. It is detected as hardware but is not supported by `libfprint`; do not run Omarchy's fingerprint setup for this model.
 
 ## Fedora Asahi — MacBook Air
 
