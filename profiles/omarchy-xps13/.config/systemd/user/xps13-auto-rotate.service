@@ -1,0 +1,13 @@
+[Unit]
+Description=Rotate the XPS 13 display and touchscreen from the accelerometer
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/xps13-auto-rotate
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+output="${XPS_ROTATE_OUTPUT:-eDP-1}"
+mode="${XPS_ROTATE_MODE:-1920x1200@59.95}"
+position="${XPS_ROTATE_POSITION:-0x0}"
+scale="${XPS_ROTATE_SCALE:-1.5}"
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/xps13-auto-rotate"
+disabled_file="$state_dir/disabled"
+
+mkdir -p "$state_dir"
+
+apply_orientation() {
+  local orientation="$1" transform touchscreen
+
+  case "$orientation" in
+    normal)    transform=0 ;;
+    right-up)  transform=1 ;;
+    bottom-up) transform=2 ;;
+    left-up)   transform=3 ;;
+    *) return ;;
+  esac
+
+  hyprctl keyword monitor "$output,$mode,$position,$scale,transform,$transform" >/dev/null || return
+  touchscreen="$(omarchy hw touchscreen 2>/dev/null || true)"
+  if [[ -n "$touchscreen" ]]; then
+    hyprctl keyword "device[$touchscreen]:transform" "$transform" >/dev/null || true
+  fi
+  printf '%s\n' "$orientation" > "$state_dir/orientation"
+}
+
+if [[ "${1:-}" == "--toggle" ]]; then
+  if [[ -e "$disabled_file" ]]; then
+    rm -f "$disabled_file"
+    systemctl --user restart xps13-auto-rotate.service
+    notify-send "Auto rotation enabled" "Display and touchscreen will follow the device orientation."
+  else
+    touch "$disabled_file"
+    systemctl --user stop xps13-auto-rotate.service
+    apply_orientation normal
+    notify-send "Auto rotation disabled" "Display rotation has been locked to landscape."
+  fi
+  exit 0
+fi
+
+[[ ! -e "$disabled_file" ]] || exit 0
+
+# Wait for the compositor when this starts with the graphical session.
+until hyprctl monitors >/dev/null 2>&1; do sleep 1; done
+
+last=""
+apply_if_changed() {
+  local orientation="$1"
+  if [[ "$orientation" != "$last" ]]; then
+    apply_orientation "$orientation"
+    last="$orientation"
+  fi
+}
+
+# Prefer iio-sensor-proxy when installed; fall back to the XPS IIO sensor.
+if command -v monitor-sensor >/dev/null 2>&1; then
+  monitor-sensor --accel | while IFS= read -r line; do
+    case "$line" in
+      *"orientation changed: normal"*)    apply_if_changed normal ;;
+      *"orientation changed: right-up"*)  apply_if_changed right-up ;;
+      *"orientation changed: bottom-up"*) apply_if_changed bottom-up ;;
+      *"orientation changed: left-up"*)   apply_if_changed left-up ;;
+    esac
+  done
+  exit 0
+fi
+
+accel=""
+for device in /sys/bus/iio/devices/iio:device*; do
+  if [[ "$(cat "$device/name" 2>/dev/null || true)" == "accel_3d" ]]; then
+    accel="$device"
+    break
+  fi
+done
+[[ -n "$accel" ]] || { echo "No accelerometer found" >&2; exit 1; }
+
+candidate=""
+stable=0
+while sleep 1; do
+  x="$(<"$accel/in_accel_x_raw")"
+  y="$(<"$accel/in_accel_y_raw")"
+
+  # Require a strong gravity component to avoid rotations while nearly flat.
+  if (( y < -550000 )); then orientation=normal
+  elif (( x > 550000 )); then orientation=right-up
+  elif (( y > 550000 )); then orientation=bottom-up
+  elif (( x < -550000 )); then orientation=left-up
+  else continue
+  fi
+
+  if [[ "$orientation" == "$candidate" ]]; then
+    ((stable += 1))
+  else
+    candidate="$orientation"
+    stable=1
+  fi
+  (( stable >= 2 )) && apply_if_changed "$orientation"
+done
